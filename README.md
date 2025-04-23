@@ -14,7 +14,7 @@ ollama pull deepseek-r1:8b
 3. Clone the repository:
 ```bash
 git clone https://github.com/JamesSSSong/5243Team6-Deep_Research.git
-cd ollama-deep-web-yt-email-researcher
+cd 5243Team6-Deep_Research
 ```
 
 4. Select a web search tool:
