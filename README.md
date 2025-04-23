@@ -13,7 +13,7 @@ ollama pull deepseek-r1:8b
 
 3. Clone the repository:
 ```bash
-git clone https://github.com/annimukherjee/ollama-deep-web-yt-email-researcher
+git clone https://github.com/JamesSSSong/5243Team6-Deep_Research.git
 cd ollama-deep-web-yt-email-researcher
 ```
 
