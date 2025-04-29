@@ -19,7 +19,8 @@ dependencies = [
   "langchain-ollama>=0.2.1",
   "youtube-transcript-api>=0.4.0",
   "requests>=2.28.1",
-  "feedparser>=6.0.8"
+  "feedparser>=6.0.8",
+  "pinecone>=2.1.0"
 ]
 
 [project.optional-dependencies]

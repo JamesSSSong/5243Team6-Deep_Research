@@ -1,5 +1,5 @@
 import json
-
+import time
 from typing_extensions import Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -18,7 +18,9 @@ from assistant.utils import (
     youtube_search,  # new import for YouTube search
     fetch_wikipedia, 
     fetch_arxiv, 
-    send_discord_message
+    send_discord_message,
+    semantic_recall,
+    upsert_to_pinecone
 )
 from assistant.state import SummaryState, SummaryStateInput, SummaryStateOutput
 from assistant.prompts import (
@@ -31,6 +33,9 @@ from assistant.prompts import (
 # Nodes
 def generate_query(state: SummaryState, config: RunnableConfig):
     """Generate a query for web search"""
+    
+    # start overall research timer
+    state.timings['start'] = time.time()
 
     # Format the prompt
     query_writer_instructions_formatted = query_writer_instructions.format(
@@ -55,7 +60,9 @@ def generate_query(state: SummaryState, config: RunnableConfig):
 
 def web_research(state: SummaryState, config: RunnableConfig):
     """Gather information from the web"""
-
+    
+    start = time.time()
+    
     # Configure
     configurable = Configuration.from_runnable_config(config)
 
@@ -88,6 +95,16 @@ def web_research(state: SummaryState, config: RunnableConfig):
     state.web_research_results.append(search_str)
     state.sources_gathered.append(format_sources(search_results))
 
+    # record web step duration
+    state.timings['web_research'] = time.time() - start
+    
+    upsert_to_pinecone(
+        source_id=f"web_{state.research_loop_count}",
+        text=search_str,
+        topic=state.research_topic,
+        config=Configuration.from_runnable_config(config),
+    )
+
     return {
         "web_research_results": state.web_research_results,
         "research_loop_count": state.research_loop_count + 1,
@@ -96,6 +113,8 @@ def web_research(state: SummaryState, config: RunnableConfig):
 
 def youtube_research(state: SummaryState, config: RunnableConfig):
     """Gather information from YouTube videos, including transcripts."""
+
+    start = time.time()
 
     configurable = Configuration.from_runnable_config(config)
     if not configurable.youtube_api_key:
@@ -110,11 +129,24 @@ def youtube_research(state: SummaryState, config: RunnableConfig):
     state.youtube_research_results.append(youtube_str)
     state.sources_gathered.append(format_sources(youtube_results))
 
+    # record YouTube step duration
+    state.timings['youtube_research'] = time.time() - start
+
+    upsert_to_pinecone(
+        source_id=f"yt_{state.research_loop_count}",
+        text=youtube_str,
+        topic=state.research_topic,
+        config=Configuration.from_runnable_config(config),
+    )
+
     return {"youtube_research_results": state.youtube_research_results}
 
 
 def wikipedia_research(state: SummaryState, config: RunnableConfig):
     """Gather intro extracts from Wikipedia."""
+    
+    start = time.time()
+    
     wiki_results = fetch_wikipedia(state.search_query, limit=3)
     wiki_str = deduplicate_and_format_sources(
         {"results": wiki_results},
@@ -123,11 +155,23 @@ def wikipedia_research(state: SummaryState, config: RunnableConfig):
     )
     state.wikipedia_research_results.append(wiki_str)
     state.sources_gathered.append(format_sources({"results": wiki_results}))
+
+    # record Wikipedia step duration
+    state.timings['wikipedia_research'] = time.time() - start
+
+    upsert_to_pinecone(
+        source_id=f"wiki_{state.research_loop_count}",
+        text=wiki_str,
+        topic=state.research_topic,
+        config=Configuration.from_runnable_config(config),
+    )
+
     return {"wikipedia_research_results": state.wikipedia_research_results}
 
 
 
 def arxiv_research(state: SummaryState, config: RunnableConfig):
+    start = time.time()
     arxiv_results = fetch_arxiv(state.search_query, max_results=3)
     arxiv_str = deduplicate_and_format_sources(
         {"results": arxiv_results},
@@ -136,6 +180,17 @@ def arxiv_research(state: SummaryState, config: RunnableConfig):
     )
     state.arxiv_research_results.append(arxiv_str)
     state.sources_gathered.append(format_sources({"results": arxiv_results}))
+    
+    # record arXiv step duration
+    state.timings['arxiv_research'] = time.time() - start
+
+    upsert_to_pinecone(
+        source_id=f"arxiv_{state.research_loop_count}",
+        text=arxiv_str,
+        topic=state.research_topic,
+        config=Configuration.from_runnable_config(config),
+    )
+    
     return {"arxiv_research_results": state.arxiv_research_results}
 
 
@@ -144,27 +199,45 @@ def summarize_sources(state: SummaryState, config: RunnableConfig):
     """Summarize the gathered sources, including both web and YouTube research"""
 
     # Existing summary
-    existing_summary = state.running_summary
+    existing_summary   = state.running_summary or ""
+    wiki_block         = state.wikipedia_research_results[-1] if state.wikipedia_research_results else ""
+    arxiv_block        = state.arxiv_research_results[-1]    if state.arxiv_research_results    else ""
+    web_block          = state.web_research_results[-1]      if state.web_research_results      else ""
+    youtube_block      = "\n".join(state.youtube_research_results) if state.youtube_research_results else ""
+    memory_block     = "\n".join(state.memory)             if state.memory                  else ""
 
-    # Most recent web research (if any)
-    most_recent_web_research = state.web_research_results[-1] if state.web_research_results else ""
-    # Combine YouTube research results if available
-    youtube_results_str = "\n".join(state.youtube_research_results) if state.youtube_research_results else ""
+    start = time.time()
 
-    # Build the human message including both sources
-    if existing_summary:
-        human_message_content = (
-            f"<User Input> \n {state.research_topic} \n <User Input>\n\n"
-            f"<Existing Summary> \n {existing_summary} \n <Existing Summary>\n\n"
-            f"<New Web Search Results> \n {most_recent_web_research} \n <New Web Search Results>\n\n"
-            f"<YouTube Search Results> \n {youtube_results_str} \n <YouTube Search Results>"
-        )
-    else:
-        human_message_content = (
-            f"<User Input> \n {state.research_topic} \n <User Input>\n\n"
-            f"<Web Search Results> \n {most_recent_web_research} \n <Web Search Results>\n\n"
-            f"<YouTube Search Results> \n {youtube_results_str} \n <YouTube Search Results>"
-        )
+    # Build a single labeled prompt for the LLM
+    human_message_content = f"""
+<User Input>
+{state.research_topic}
+</User Input>
+
+<Memory>
+{memory_block}
+</Memory>
+
+<Existing Summary>
+{existing_summary}
+</Existing Summary>
+
+<Background (Wikipedia)>
+{wiki_block}
+</Background (Wikipedia)>
+
+<Academic Findings (arXiv)>
+{arxiv_block}
+</Academic Findings (arXiv)>
+
+<Industry Examples (Web)>
+{web_block}
+</Industry Examples (Web)>
+
+<Industry Examples (YouTube)>
+{youtube_block}
+</Industry Examples (YouTube)>
+"""
 
     # Run the LLM to generate an updated summary
     configurable = Configuration.from_runnable_config(config)
@@ -185,6 +258,8 @@ def summarize_sources(state: SummaryState, config: RunnableConfig):
         running_summary = running_summary[:start] + running_summary[end:]
 
     state.running_summary = running_summary
+    state.timings['summarize_sources'] = time.time() - start
+    
     return {"running_summary": running_summary}
 
 
@@ -217,14 +292,30 @@ def reflect_on_summary(state: SummaryState, config: RunnableConfig):
 
 
 def finalize_summary(state: SummaryState):
-    """Finalize the summary"""
-
+    if 'start' in state.timings:
+        state.timings['total_research_time'] = time.time() - state.timings['start']
+        
     # Format all accumulated sources into a single bulleted list
     all_sources = "\n".join(source for source in state.sources_gathered)
+    title = f"# Research Topic: {state.research_topic}\n\n"
     state.running_summary = (
-        f"## Summary\n\n{state.running_summary}\n\n### Sources:\n{all_sources}"
+        f"{title}"
+        f"## Summary\n\n"
+        f"{state.running_summary}\n\n"
+        f"### Sources:\n{all_sources}"
     )
-    return {"running_summary": state.running_summary}
+
+    # Append Timings section
+    if state.timings:
+        timing_lines = "\n".join(f"* {step}: {secs:.2f}s"
+                                 for step, secs in state.timings.items())
+        state.running_summary += f"\n\n### Timings (s)\n{timing_lines}"
+
+    # return both the markdown and the raw timings dict
+    return {
+        "running_summary": state.running_summary,
+        "timings": state.timings
+    }
 
 
 def send_email(state: SummaryState, config: RunnableConfig):
@@ -275,6 +366,12 @@ def route_research(
         return "finalize_summary"
 
 
+def recall_memory(state: SummaryState, config: RunnableConfig):
+    """Fetch relevant past chunks from Pinecone memory."""
+    cfg = Configuration.from_runnable_config(config)
+    recalls = semantic_recall(state.search_query, top_k=5, config=cfg)
+    state.memory = recalls
+    return {"memory": state.memory}
 
 
 
@@ -288,6 +385,7 @@ builder = StateGraph(
 )
 
 builder.add_node("generate_query", generate_query)
+builder.add_node("recall_memory", recall_memory)
 builder.add_node("web_research", web_research)
 builder.add_node("youtube_research", youtube_research)  # new node for YouTube research
 builder.add_node("wikipedia_research", wikipedia_research)
@@ -300,7 +398,8 @@ builder.add_node("send_to_discord", send_to_discord)
 
 # Add edges
 builder.add_edge(START, "generate_query")
-builder.add_edge("generate_query", "web_research")
+builder.add_edge("generate_query", "recall_memory")
+builder.add_edge("recall_memory", "web_research")
 builder.add_edge("web_research", "youtube_research")  # route to YouTube research after web research
 builder.add_edge("youtube_research", "wikipedia_research")
 builder.add_edge("wikipedia_research", "arxiv_research")

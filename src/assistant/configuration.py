@@ -17,7 +17,7 @@ class SearchAPI(Enum):
 class Configuration:
     """The configurable fields for the research assistant."""
 
-    max_web_research_loops: int = 2
+    max_web_research_loops: int = 1
     local_llm: str = "llama3.2"
     search_api: SearchAPI = SearchAPI.TAVILY  # Default to TAVILY
 
@@ -34,7 +34,10 @@ class Configuration:
     smtp_username: Optional[str] = os.getenv("SMTP_USERNAME")
     smtp_password: Optional[str] = os.getenv("SMTP_PASSWORD")
     tavily_api_key: Optional[str] = os.getenv("TAVILY_API_KEY")
-    discord_webhook_url: Optional[str] = None
+    discord_webhook_url: Optional[str] = os.getenv("DISCORD_WEBHOOK_URL")
+    pinecone_api_key: Optional[str] = os.getenv("PINECONE_API_KEY")
+    pinecone_environment: Optional[str] = os.getenv("PINECONE_ENVIRONMENT")
+    pinecone_index_name: Optional[str] = os.getenv("PINECONE_INDEX_NAME")
 
 
 

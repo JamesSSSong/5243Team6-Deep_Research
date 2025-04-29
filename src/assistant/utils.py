@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 from typing import Dict, Any
 from langsmith import traceable
@@ -9,6 +10,10 @@ from urllib.parse import quote_plus
 from typing import List, Dict
 from assistant.configuration import Configuration
 import json
+
+from pinecone import Pinecone, ServerlessSpec
+
+
 
 def deduplicate_and_format_sources(search_response, max_tokens_per_source, include_raw_content=False):
     """
@@ -320,6 +325,67 @@ def fetch_arxiv(query: str, max_results: int = 3) -> List[Dict[str, Any]]:
             "raw_content": summary
         })
     return results
+
+
+_STOPWORDS = {
+    "is","the","a","an","of","to","and","for","in","on","how","what","why","that"
+}
+
+def extract_keywords(text: str, min_len: int = 3) -> list[str]:
+    """Lowercase, split on non‐word chars, drop stopwords & short tokens."""
+    tokens = re.findall(r"\w+", text.lower())
+    kws = {t for t in tokens if len(t) >= min_len and t not in _STOPWORDS}
+    return list(kws)
+    
+
+def _init_pinecone(cfg: Configuration):
+    """Initialize the Pinecone client and return the Index object."""
+    pc = Pinecone(
+        api_key=cfg.pinecone_api_key,
+        environment=cfg.pinecone_environment,
+    )
+    # Simply connect to your existing index
+    return pc.Index(cfg.pinecone_index_name)
+
+
+def upsert_to_pinecone(source_id: str, text: str, topic: str, config: Configuration):
+    """Correct way to upsert raw text to Pinecone (integrated embedding version)."""
+    idx = _init_pinecone(config)
+    keywords = extract_keywords(topic)
+    idx.upsert_records(
+        namespace="",
+        records=[{
+            "_id": source_id,
+            "text": text,
+            "keywords": extract_keywords(topic)
+        }]
+    )
+
+def semantic_recall(query: str, top_k: int, config: Configuration) -> list[str]:
+    """
+    Retrieve the top_k most similar chunks using Pinecone’s integrated-embedding index.
+    """
+    # Get your Index instance (not the Pinecone client)
+    idx = _init_pinecone(config)
+    kw = extract_keywords(query)
+    # Perform a semantic search by text
+    query_body: dict[str,Any] = {
+        "inputs": {"text": query},
+        "top_k": top_k
+    }
+    if kw:
+        query_body["filter"] = {"keywords": {"$in": kw}}
+
+    resp = idx.search(
+        namespace="",
+        query=query_body,
+        fields=["text"]
+    )
+
+    matches = getattr(resp, "matches", []) or resp.get("result", {}).get("hits", [])
+    return [m.fields["text"] for m in matches if getattr(m, "fields", None)]
+
+
 
 
 def send_discord_message(content: str) -> Dict[str, Any]:

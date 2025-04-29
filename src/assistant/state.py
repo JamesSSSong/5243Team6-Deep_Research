@@ -14,6 +14,8 @@ class SummaryState:
     sources_gathered: Annotated[list, operator.add] = field(default_factory=list)
     research_loop_count: int = field(default=0)  # Research loop count
     running_summary: str = field(default=None)  # Final report
+    memory: list = field(default_factory=list)  # retrieved embeddings
+    timings: dict = field(default_factory=dict)  # record duration per step and total
 
 
 @dataclass(kw_only=True)
@@ -24,3 +26,4 @@ class SummaryStateInput:
 @dataclass(kw_only=True)
 class SummaryStateOutput:
     running_summary: str = field(default=None)  # Final report
+    timings: dict = field(default_factory=dict)  # Per-step and total durations in seconds

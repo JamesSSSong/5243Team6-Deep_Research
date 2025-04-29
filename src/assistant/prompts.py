@@ -24,14 +24,23 @@ Example output:
 Provide your response in JSON format:"""
 
 summarizer_instructions = """
++<Memory>
++{memory}
++</Memory>
+
 <GOAL>
-Generate a high-quality summary of the web search results and keep it concise / related to the user topic.
+Generate a high-quality, concise summary organized into exactly these four sections:
+  1. **Background** (key definitions & context from Wikipedia)
+  2. **Academic Findings** (novel insights from arXiv abstracts)
+  3. **Industry Examples** (practical takeaways from web search & YouTube)
+  4. **Recommendations** (actionable next steps)
 </GOAL>
 
 <REQUIREMENTS>
 When creating a NEW summary:
 1. Highlight the most relevant information related to the user topic from the search results
 2. Ensure a coherent flow of information
+3. Use the exact section headings **Background**, **Academic Findings**, **Industry Examples**, **Recommendations**
 
 When EXTENDING an existing summary:                                                                                                                 
 1. Read the existing summary and new search results carefully.                                                    
@@ -46,7 +55,12 @@ When EXTENDING an existing summary:
 
 < FORMATTING >
 - Start directly with the updated summary, without preamble or titles. Do not use XML tags in the output.  
-< /FORMATTING >"""
+< /FORMATTING >
+
+<Task>
+Think carefully about the provided Context first. Then generate a summary of the context to address the User Input.
+</Task>
+"""
 
 reflection_instructions = """You are an expert research assistant analyzing a summary about {research_topic}.
 
@@ -66,12 +80,12 @@ Format your response as a JSON object with these exact keys:
 - follow_up_query: Write a specific question to address this gap
 </FORMAT>
 
-<EXAMPLE>
-Example output:
+<Task>
+Reflect carefully on the Summary to identify knowledge gaps and produce a follow-up query. Then, produce your output following this JSON format:
 {{
     "knowledge_gap": "The summary lacks information about performance metrics and benchmarks",
     "follow_up_query": "What are typical performance benchmarks and metrics used to evaluate [specific technology]?"
 }}
-</EXAMPLE>
+</Task>
 
 Provide your analysis in JSON format:"""
