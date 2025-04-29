@@ -3,7 +3,7 @@ name = "ollama-deep-researcher"
 version = "0.0.1"
 description = "Web + YouTube + Wikipedia + arXiv research assistant with email & Discord delivery."
 authors = [
-  { name = "Aniruddha Mukherjee" }
+  { name = "Dailin Song" }
 ]
 readme = "README.md"
 license = { text = "MIT" }
