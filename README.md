@@ -1,4 +1,4 @@
-# ollama-deep-web-yt-wikipedia-arxiv-email-discord-researcher
+# Ollama-Local-Deep-Researcher
  
 ##  Quickstart
 
@@ -41,10 +41,10 @@ SMTP_SERVER=smtp.gmail.com
 SMTP_PORT=xxxx               # Port for Email Application
 YOUTUBE_API_KEY=xxxx          # Get your key at https://www.getphyllo.com/post/how-to-get-youtube-api-key
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1364074501989601341/3ehk0Nhl3v8XnKDrbxS9Qcb6jj2YBUG4OqQ4JgNX1qbu9Zwkd6835EDVFanOLxBfaCLQ
-```
-
-
-**Note: Also copy these same keys to the `configuration.py` file present in the `src/assistant` directory.** 
+PINECONE_API_KEY=pcsk_6aiQXm_G61irwpEJv3Va7ytW4KWD63kFf2BaPjr2Egcpf5iFHibmjbe8Gk1hDpPRPcgxf
+PINECONE_ENVIRONMENT=us-east-1
+PINECONE_INDEX_NAME=research-index
+``` 
 
 Note: If you prefer using environment variables directly, you can set them in your shell:
 ```bash
@@ -109,6 +109,10 @@ EMAIL_RECIPIENT=xxxx@gmail.com  # The email that will receive the summary
 SMTP_SERVER=smtp.gmail.com
 SMTP_PORT=xxxx               # Port for Email Application
 YOUTUBE_API_KEY=xxxx          # Get your key at https://www.getphyllo.com/post/how-to-get-youtube-api-key
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1364074501989601341/3ehk0Nhl3v8XnKDrbxS9Qcb6jj2YBUG4OqQ4JgNX1qbu9Zwkd6835EDVFanOLxBfaCLQ
+PINECONE_API_KEY=pcsk_6aiQXm_G61irwpEJv3Va7ytW4KWD63kFf2BaPjr2Egcpf5iFHibmjbe8Gk1hDpPRPcgxf
+PINECONE_ENVIRONMENT=us-east-1
+PINECONE_INDEX_NAME=research-index
 ```
 
 Note: If you prefer using environment variables directly, you can set them in Windows (via System Properties or PowerShell):
@@ -162,24 +166,69 @@ In the `configuration` tab:
 Give the assistant a topic for research, and you can visualize its process!
 
 
-## How it works
+## How it Works
 
-Ollama Deep Researcher is inspired by [IterDRAG](https://arxiv.org/html/2410.04343v1#:~:text=To%20tackle%20this%20issue%2C%20we,used%20to%20generate%20intermediate%20answers.). This approach will decompose a query into sub-queries, retrieve documents for each one, answer the sub-query, and then build on the answer by retrieving docs for the second sub-query. Here, we do similar:
-- Given a user-provided topic, use a local LLM (via [Ollama](https://ollama.com/search)) to generate a web search query
-- Uses a search engine (configured for [Tavily](https://www.tavily.com/)) to find relevant sources
-- Uses LLM to summarize the findings from web search related to the user-provided research topic
-- Then, it uses the LLM to reflect on the summary, identifying knowledge gaps
-- It generates a new search query to address the knowledge gaps
-- The process repeats, with the summary being iteratively updated with new information from web search
-- It will repeat down the research rabbit hole 
-- Runs for a configurable number of iterations (see `configuration` tab)  
+1. **Session Start & Memory Recall**  
+   - Timestamp the start of the run.  
+   - Query Pinecone for the top K most relevant “memory” chunks from past runs.
+
+2. **Query Generation**  
+   - Use your local LLM (Ollama) to turn the user’s topic (plus recalled memory) into a tight search query.
+
+3. **Multi-Source Retrieval & Persistence**  
+   - **Web Search** (Tavily or Perplexity) → dedupe & format → upsert raw text into Pinecone.  
+   - **YouTube Transcripts** → fetch, format → upsert into Pinecone.  
+   - **Wikipedia Extracts** → pull intro paragraphs → format → upsert into Pinecone.  
+   - **arXiv Abstracts** → retrieve, format → upsert into Pinecone.  
+   - Record each step’s duration.
+
+4. **Summarization**  
+   - Invoke the LLM with clearly labeled blocks for Memory, Wikipedia, arXiv, Web, and YouTube content.  
+   - Produce a concise summary organized into four sections:  
+     1. **Background** (Wikipedia context)  
+     2. **Academic Findings** (arXiv insights)  
+     3. **Industry Examples** (Web & YouTube)  
+     4. **Recommendations** (actionable next steps)
+
+5. **Reflection & Follow-Up**  
+   - Ask the LLM to analyze the running summary, spot knowledge gaps, and generate a new follow-up query.
+
+6. **Iteration**  
+   - Repeat steps **2–5** for a configurable number of loops, each time building on memory and refining the summary.
+
+7. **Finalization**  
+   - Compute total elapsed time.  
+   - Prepend the research topic as a top-level heading.  
+   - Append the full list of sources and a “Timings (s)” section showing per-step and total durations.
+
+8. **Delivery**  
+   - **Email**: send the Markdown summary via SMTP.  
+   - **Discord**: post the same report (and raw timing JSON) into your channel via webhook.  
+
+This pipeline combines iterative LLM-driven query refinement, multi-source retrieval, persistent semantic memory, structured summarization, and transparent performance metrics—delivering richer research faster over repeated runs.
 
 ## Outputs
 
-The output of the graph is a markdown file emailed to your email of choice containing the research summary, with citations to the sources used.
+- **Markdown Summary**  
+  A finalized research report in Markdown, prefaced by  
+  `# Research Topic: <your topic>`, with four structured sections (Background, Academic Findings, Industry Examples, Recommendations), followed by a bulleted “Sources” list and a “Timings (s)” table showing per‐step and total durations.
 
-All sources gathered during research are saved to the graph state. 
+- **Email Delivery**  
+  The full Markdown summary is sent via SMTP under the subject  
+  `Research Summary: <your topic>`.
 
-You can visualize them in the graph state, which is visible in LangGraph Studio:
+- **Discord Post**  
+  The same Markdown report (and raw `timings` JSON) is posted to your configured Discord channel via webhook.
+
+- **Persistent Memory**  
+  All fetched chunks (web, YouTube, Wikipedia, arXiv) are upserted into Pinecone so that subsequent runs recall and build on past research.
+
+- **LangGraph Studio State**  
+  You can inspect the live graph state in Studio, including:  
+  - `web_research_results`, `youtube_research_results`, `wikipedia_research_results`, `arxiv_research_results` lists  
+  - `memory` (the top‐k recalled snippets)  
+  - `sources_gathered`  
+  - `timings` (per‐node and total run time)  
+  - `running_summary`
 
 
