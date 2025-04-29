@@ -1,6 +1,6 @@
-# ollama-deep-web-yt-email-researcher
+# ollama-deep-web-yt-wikipedia-arxiv-email-discord-researcher
  
-## 🚀 Quickstart
+##  Quickstart
 
 ### Mac 
 
@@ -13,8 +13,8 @@ ollama pull deepseek-r1:8b
 
 3. Clone the repository:
 ```bash
-git clone https://github.com/annimukherjee/ollama-deep-web-yt-email-researcher
-cd ollama-deep-web-yt-email-researcher
+git clone https://github.com/JamesSSSong/5243Team6-Deep_Research.git
+cd 5243Team6-Deep_Research
 ```
 
 4. Select a web search tool:
@@ -40,6 +40,7 @@ EMAIL_RECIPIENT=xxxx@gmail.com  # The email that will receive the summary
 SMTP_SERVER=smtp.gmail.com
 SMTP_PORT=xxxx               # Port for Email Application
 YOUTUBE_API_KEY=xxxx          # Get your key at https://www.getphyllo.com/post/how-to-get-youtube-api-key
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1364074501989601341/3ehk0Nhl3v8XnKDrbxS9Qcb6jj2YBUG4OqQ4JgNX1qbu9Zwkd6835EDVFanOLxBfaCLQ
 ```
 
 
@@ -82,7 +83,7 @@ ollama pull deepseek-r1:8b
 
 3. Clone the repository:
 ```bash
-git clone https://github.com/annimukherjee/ollama-deep-web-yt-email-researcher
+git clone https://github.com/JamesSSSong/5243Team6-Deep_Research.git
 cd ollama-deep-web-yt-email-researcher
 ```
  
@@ -156,7 +157,7 @@ Open `LangGraph Studio Web UI` via the URL in the output above.
 In the `configuration` tab:
 * Pick your web search tool (Tavily or Perplexity) (it will by default be `Tavily`) 
 * Set the name of your local LLM to use with Ollama (it will by default be `llama3.2`) 
-* You can set the depth of the research iterations (it will by default be `3`)
+* You can set the depth of the research iterations (it will by default be `2`)
 
 Give the assistant a topic for research, and you can visualize its process!
 
@@ -181,5 +182,4 @@ All sources gathered during research are saved to the graph state.
 
 You can visualize them in the graph state, which is visible in LangGraph Studio:
 
-![grab-Studio - LangSmith--Google Chrome_at_15 34 24_on__27-02-2025__003670](https://github.com/user-attachments/assets/69b08847-689a-4e1e-8805-7d77bae0d1b2)
 
